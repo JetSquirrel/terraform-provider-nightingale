@@ -305,6 +305,14 @@ func (r *NotifyRuleResource) refreshState(ctx context.Context, state *NotifyRule
 		if !diags.HasError() {
 			state.NotifyConfigs = listValue
 		}
+	} else {
+		state.NotifyConfigs = types.ListNull(types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"channel_id":  types.Int64Type,
+				"template_id": types.Int64Type,
+				"params":      types.MapType{ElemType: types.StringType},
+			},
+		})
 	}
 }
 

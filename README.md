@@ -7,7 +7,7 @@ This Terraform provider manages [Nightingale](https://github.com/ccfos/nightinga
 ## Requirements
 
 - [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.0
-- [Go](https://golang.org/doc/install) >= 1.24 (for building from source)
+- [Go](https://golang.org/doc/install) >= 1.25 (for building from source)
 
 ## Supported Resources
 
@@ -138,7 +138,7 @@ go test ./...
 Run acceptance tests (requires a live Nightingale instance):
 
 ```shell
-export NIGHTINGALE_ACC=1
+export TF_ACC=1
 export NIGHTINGALE_ENDPOINT="https://n9e.example.com"
 export NIGHTINGALE_TOKEN="your-token"
 export NIGHTINGALE_BUSI_GROUP_ID=1

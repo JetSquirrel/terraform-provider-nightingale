@@ -79,17 +79,37 @@ func (p *NightingaleProvider) Configure(ctx context.Context, req provider.Config
 	if !data.TimeoutSeconds.IsNull() && !data.TimeoutSeconds.IsUnknown() {
 		timeoutSeconds = data.TimeoutSeconds.ValueInt64()
 	} else if v := os.Getenv("NIGHTINGALE_TIMEOUT_SECONDS"); v != "" {
-		if parsed, err := strconv.ParseInt(v, 10, 64); err == nil {
-			timeoutSeconds = parsed
+		parsed, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Invalid Timeout Configuration",
+				fmt.Sprintf("NIGHTINGALE_TIMEOUT_SECONDS must be a valid integer: %s", err),
+			)
+			return
 		}
+		timeoutSeconds = parsed
+	}
+
+	if timeoutSeconds <= 0 {
+		resp.Diagnostics.AddError(
+			"Invalid Timeout Configuration",
+			fmt.Sprintf("timeout_seconds must be a positive integer, got: %d", timeoutSeconds),
+		)
+		return
 	}
 
 	if !data.InsecureSkipTLSVerify.IsNull() && !data.InsecureSkipTLSVerify.IsUnknown() {
 		insecureSkipTLSVerify = data.InsecureSkipTLSVerify.ValueBool()
 	} else if v := os.Getenv("NIGHTINGALE_INSECURE_SKIP_TLS_VERIFY"); v != "" {
-		if parsed, err := strconv.ParseBool(v); err == nil {
-			insecureSkipTLSVerify = parsed
+		parsed, err := strconv.ParseBool(v)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Invalid TLS Verify Configuration",
+				fmt.Sprintf("NIGHTINGALE_INSECURE_SKIP_TLS_VERIFY must be a valid boolean: %s", err),
+			)
+			return
 		}
+		insecureSkipTLSVerify = parsed
 	}
 
 	endpoint = strings.TrimRight(endpoint, "/")

@@ -98,7 +98,7 @@ func (c *Client) doRequest(ctx context.Context, method, uri string, body interfa
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		preview := string(respBody)
 		if len(preview) > 512 {
 			preview = preview[:512] + "..."
@@ -107,7 +107,9 @@ func (c *Client) doRequest(ctx context.Context, method, uri string, body interfa
 	}
 
 	var env Envelope
-	if err := json.Unmarshal(respBody, &env); err != nil {
+	if len(respBody) == 0 || string(respBody) == "null" {
+		env = Envelope{Dat: json.RawMessage("null"), Err: ""}
+	} else if err := json.Unmarshal(respBody, &env); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
