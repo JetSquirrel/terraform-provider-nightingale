@@ -5,105 +5,151 @@ package provider
 
 import (
 	"context"
-	"net/http"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
 
-	"github.com/hashicorp/terraform-plugin-framework/action"
+	"github.com/JetSquirrel/terraform-provider-nightingale/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
-	"github.com/hashicorp/terraform-plugin-framework/ephemeral"
-	"github.com/hashicorp/terraform-plugin-framework/function"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-// Ensure ScaffoldingProvider satisfies various provider interfaces.
-var _ provider.Provider = &ScaffoldingProvider{}
-var _ provider.ProviderWithFunctions = &ScaffoldingProvider{}
-var _ provider.ProviderWithEphemeralResources = &ScaffoldingProvider{}
-var _ provider.ProviderWithActions = &ScaffoldingProvider{}
+// Ensure NightingaleProvider satisfies various provider interfaces.
+var _ provider.Provider = &NightingaleProvider{}
 
-// ScaffoldingProvider defines the provider implementation.
-type ScaffoldingProvider struct {
-	// version is set to the provider version on release, "dev" when the
-	// provider is built and ran locally, and "test" when running acceptance
-	// testing.
+// NightingaleProvider defines the provider implementation.
+type NightingaleProvider struct {
 	version string
 }
 
-// ScaffoldingProviderModel describes the provider data model.
-type ScaffoldingProviderModel struct {
-	Endpoint types.String `tfsdk:"endpoint"`
+// NightingaleProviderModel describes the provider data model.
+type NightingaleProviderModel struct {
+	Endpoint              types.String `tfsdk:"endpoint"`
+	Token                 types.String `tfsdk:"token"`
+	TimeoutSeconds        types.Int64  `tfsdk:"timeout_seconds"`
+	InsecureSkipTLSVerify types.Bool   `tfsdk:"insecure_skip_tls_verify"`
 }
 
-func (p *ScaffoldingProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
-	resp.TypeName = "scaffolding"
+func (p *NightingaleProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
+	resp.TypeName = "nightingale"
 	resp.Version = p.version
 }
 
-func (p *ScaffoldingProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
+func (p *NightingaleProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"endpoint": schema.StringAttribute{
-				MarkdownDescription: "Example provider attribute",
+				MarkdownDescription: "Base URL for the Nightingale center API. May be set via NIGHTINGALE_ENDPOINT environment variable.",
+				Optional:            true,
+			},
+			"token": schema.StringAttribute{
+				MarkdownDescription: "User token sent as X-User-Token. May be set via NIGHTINGALE_TOKEN environment variable.",
+				Optional:            true,
+				Sensitive:           true,
+			},
+			"timeout_seconds": schema.Int64Attribute{
+				MarkdownDescription: "HTTP timeout in seconds. Default is 30. May be set via NIGHTINGALE_TIMEOUT_SECONDS environment variable.",
+				Optional:            true,
+			},
+			"insecure_skip_tls_verify": schema.BoolAttribute{
+				MarkdownDescription: "Skip TLS certificate verification. Default is false. May be set via NIGHTINGALE_INSECURE_SKIP_TLS_VERIFY environment variable.",
 				Optional:            true,
 			},
 		},
 	}
 }
 
-func (p *ScaffoldingProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
-	var data ScaffoldingProviderModel
+func (p *NightingaleProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
+	var data NightingaleProviderModel
 
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
-
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// Configuration values are now available.
-	// if data.Endpoint.IsNull() { /* ... */ }
+	endpoint := getConfigValue(data.Endpoint, "NIGHTINGALE_ENDPOINT")
+	token := getConfigValue(data.Token, "NIGHTINGALE_TOKEN")
+	timeoutSeconds := int64(30)
+	insecureSkipTLSVerify := false
 
-	// Example client configuration for data sources and resources
-	client := http.DefaultClient
-	resp.DataSourceData = client
-	resp.ResourceData = client
+	if !data.TimeoutSeconds.IsNull() && !data.TimeoutSeconds.IsUnknown() {
+		timeoutSeconds = data.TimeoutSeconds.ValueInt64()
+	} else if v := os.Getenv("NIGHTINGALE_TIMEOUT_SECONDS"); v != "" {
+		if parsed, err := strconv.ParseInt(v, 10, 64); err == nil {
+			timeoutSeconds = parsed
+		}
+	}
+
+	if !data.InsecureSkipTLSVerify.IsNull() && !data.InsecureSkipTLSVerify.IsUnknown() {
+		insecureSkipTLSVerify = data.InsecureSkipTLSVerify.ValueBool()
+	} else if v := os.Getenv("NIGHTINGALE_INSECURE_SKIP_TLS_VERIFY"); v != "" {
+		if parsed, err := strconv.ParseBool(v); err == nil {
+			insecureSkipTLSVerify = parsed
+		}
+	}
+
+	endpoint = strings.TrimRight(endpoint, "/")
+	if endpoint == "" {
+		resp.Diagnostics.AddError(
+			"Missing Endpoint Configuration",
+			"The endpoint attribute or NIGHTINGALE_ENDPOINT environment variable must be set.",
+		)
+		return
+	}
+	if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
+		resp.Diagnostics.AddError(
+			"Invalid Endpoint Configuration",
+			fmt.Sprintf("The endpoint must have http or https scheme: %s", endpoint),
+		)
+		return
+	}
+	if token == "" {
+		resp.Diagnostics.AddError(
+			"Missing Token Configuration",
+			"The token attribute or NIGHTINGALE_TOKEN environment variable must be set.",
+		)
+		return
+	}
+
+	userAgent := fmt.Sprintf("terraform-provider-nightingale/%s", p.version)
+	c, err := client.New(endpoint, token, int(timeoutSeconds), insecureSkipTLSVerify, userAgent)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Create Nightingale Client",
+			fmt.Sprintf("Error creating client: %s", err),
+		)
+		return
+	}
+
+	resp.DataSourceData = c
+	resp.ResourceData = c
 }
 
-func (p *ScaffoldingProvider) Resources(ctx context.Context) []func() resource.Resource {
+func (p *NightingaleProvider) Resources(ctx context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
-		NewExampleResource,
+		NewAlertRuleResource,
 	}
 }
 
-func (p *ScaffoldingProvider) EphemeralResources(ctx context.Context) []func() ephemeral.EphemeralResource {
-	return []func() ephemeral.EphemeralResource{
-		NewExampleEphemeralResource,
-	}
-}
-
-func (p *ScaffoldingProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
-	return []func() datasource.DataSource{
-		NewExampleDataSource,
-	}
-}
-
-func (p *ScaffoldingProvider) Functions(ctx context.Context) []func() function.Function {
-	return []func() function.Function{
-		NewExampleFunction,
-	}
-}
-
-func (p *ScaffoldingProvider) Actions(ctx context.Context) []func() action.Action {
-	return []func() action.Action{
-		NewExampleAction,
-	}
+func (p *NightingaleProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
+	return nil
 }
 
 func New(version string) func() provider.Provider {
 	return func() provider.Provider {
-		return &ScaffoldingProvider{
+		return &NightingaleProvider{
 			version: version,
 		}
 	}
+}
+
+func getConfigValue(attr types.String, envVar string) string {
+	if !attr.IsNull() && !attr.IsUnknown() {
+		return attr.ValueString()
+	}
+	return os.Getenv(envVar)
 }
