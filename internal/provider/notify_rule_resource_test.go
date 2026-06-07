@@ -4,7 +4,6 @@
 package provider
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,7 +15,7 @@ import (
 
 func TestNotifyRuleResourceRefreshState(t *testing.T) {
 	r := &NotifyRuleResource{}
-	ctx := context.Background()
+	ctx := t.Context()
 
 	state := &NotifyRuleResourceModel{ID: types.StringValue("11")}
 	remote := &client.NotifyRule{
@@ -53,7 +52,7 @@ func TestNotifyRuleResourceRefreshState(t *testing.T) {
 }
 
 func TestNotifyRuleResourceExpandConfigs(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	configModels := []NotifyConfigModel{
 		{
 			ChannelID:  types.Int64Value(1),
@@ -93,7 +92,7 @@ func TestNotifyRuleResourceReadNotFound(t *testing.T) {
 	defer server.Close()
 
 	c, _ := client.New(server.URL, "token", 30, false, "test")
-	_, err := c.GetNotifyRule(context.Background(), 999)
+	_, err := c.GetNotifyRule(t.Context(), 999)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -107,7 +106,7 @@ func TestNotifyRuleResourceDeleteToleratesNotFound(t *testing.T) {
 	defer server.Close()
 
 	c, _ := client.New(server.URL, "token", 30, false, "test")
-	err := c.DeleteNotifyRules(context.Background(), []int64{999})
+	err := c.DeleteNotifyRules(t.Context(), []int64{999})
 	if err == nil {
 		t.Fatal("expected error from client")
 	}
@@ -119,6 +118,6 @@ func TestNotifyRuleResourceDeleteToleratesNotFound(t *testing.T) {
 func newMockServer(status int, body string) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
-		w.Write([]byte(body))
+		_, _ = w.Write([]byte(body))
 	}))
 }

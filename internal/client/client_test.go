@@ -1,7 +1,9 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package client
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -32,7 +34,7 @@ func TestClientHeaders(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedReq = r
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":1}`), Err: ""})
+		_ = json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":1}`), Err: ""})
 	}))
 	defer server.Close()
 
@@ -41,7 +43,7 @@ func TestClientHeaders(t *testing.T) {
 		t.Fatalf("failed to create client: %v", err)
 	}
 
-	_, err = c.doRequest(context.Background(), "POST", "/api/test", map[string]string{"key": "value"})
+	_, err = c.doRequest(t.Context(), "POST", "/api/test", map[string]string{"key": "value"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -69,7 +71,7 @@ func TestClientPathBuilding(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`null`), Err: ""})
+		_ = json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`null`), Err: ""})
 	}))
 	defer server.Close()
 
@@ -86,7 +88,7 @@ func TestClientPathBuilding(t *testing.T) {
 
 	for _, tc := range cases {
 		c, _ := New(tc.endpoint, "token", 30, false, "test")
-		c.doRequest(context.Background(), "GET", tc.uri, nil)
+		_, _ = c.doRequest(t.Context(), "GET", tc.uri, nil)
 
 		if gotPath != tc.wantPath {
 			t.Errorf("endpoint=%q uri=%q: got path %q, want %q", tc.endpoint, tc.uri, gotPath, tc.wantPath)
@@ -97,12 +99,12 @@ func TestClientPathBuilding(t *testing.T) {
 func TestClientSuccess(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":42}`), Err: ""})
+		_ = json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":42}`), Err: ""})
 	}))
 	defer server.Close()
 
 	c, _ := New(server.URL, "token", 30, false, "test")
-	env, err := c.doRequest(context.Background(), "GET", "/api/test", nil)
+	env, err := c.doRequest(t.Context(), "GET", "/api/test", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -119,12 +121,12 @@ func TestClientSuccess(t *testing.T) {
 func TestClientNon200Status(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("not found"))
+		_, _ = w.Write([]byte("not found"))
 	}))
 	defer server.Close()
 
 	c, _ := New(server.URL, "token", 30, false, "test")
-	_, err := c.doRequest(context.Background(), "GET", "/api/test", nil)
+	_, err := c.doRequest(t.Context(), "GET", "/api/test", nil)
 	if err == nil {
 		t.Fatal("expected error for non-200 status")
 	}
@@ -139,12 +141,12 @@ func TestClientNon200Status(t *testing.T) {
 func TestClientAPIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(Envelope{Dat: nil, Err: "permission denied"})
+		_ = json.NewEncoder(w).Encode(Envelope{Dat: nil, Err: "permission denied"})
 	}))
 	defer server.Close()
 
 	c, _ := New(server.URL, "token", 30, false, "test")
-	_, err := c.doRequest(context.Background(), "GET", "/api/test", nil)
+	_, err := c.doRequest(t.Context(), "GET", "/api/test", nil)
 	if err == nil {
 		t.Fatal("expected error for API error")
 	}
@@ -156,12 +158,12 @@ func TestClientAPIError(t *testing.T) {
 func TestClientMalformedJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("not json"))
+		_, _ = w.Write([]byte("not json"))
 	}))
 	defer server.Close()
 
 	c, _ := New(server.URL, "token", 30, false, "test")
-	_, err := c.doRequest(context.Background(), "GET", "/api/test", nil)
+	_, err := c.doRequest(t.Context(), "GET", "/api/test", nil)
 	if err == nil {
 		t.Fatal("expected error for malformed JSON")
 	}
@@ -170,12 +172,12 @@ func TestClientMalformedJSON(t *testing.T) {
 func TestClientDoesNotLeakToken(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("internal error"))
+		_, _ = w.Write([]byte("internal error"))
 	}))
 	defer server.Close()
 
 	c, _ := New(server.URL, "super-secret-token", 30, false, "test")
-	_, err := c.doRequest(context.Background(), "GET", "/api/test", nil)
+	_, err := c.doRequest(t.Context(), "GET", "/api/test", nil)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -194,27 +196,27 @@ func TestClientAlertRuleCRUD(t *testing.T) {
 		lastPath = r.URL.Path
 
 		if r.Body != nil {
-			json.NewDecoder(r.Body).Decode(&lastBody)
+			_ = json.NewDecoder(r.Body).Decode(&lastBody)
 		}
 
 		w.WriteHeader(http.StatusOK)
 		switch {
 		case r.Method == "POST":
-			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"test-rule":""}`), Err: ""})
+			_ = json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"test-rule":""}`), Err: ""})
 		case r.Method == "GET" && r.URL.Path == "/api/n9e/busi-group/1/alert-rules":
-			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`[{"id":99,"name":"test-rule","cate":"prometheus","group_id":1,"rule_config":"{\"queries\":[{\"prom_ql\":\"up == 1\"}]}","disabled":0,"severity":2,"create_at":1234567890,"create_by":"admin","update_at":1234567890,"update_by":"admin"}]`), Err: ""})
+			_ = json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`[{"id":99,"name":"test-rule","cate":"prometheus","group_id":1,"rule_config":"{\"queries\":[{\"prom_ql\":\"up == 1\"}]}","disabled":0,"severity":2,"create_at":1234567890,"create_by":"admin","update_at":1234567890,"update_by":"admin"}]`), Err: ""})
 		case r.Method == "GET":
-			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":99,"name":"updated-rule","cate":"prometheus","group_id":1,"rule_config":"{\"queries\":[{\"prom_ql\":\"up == 1\"}]}","disabled":0,"severity":2,"create_at":1234567890,"create_by":"admin","update_at":1234567890,"update_by":"admin"}`), Err: ""})
+			_ = json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":99,"name":"updated-rule","cate":"prometheus","group_id":1,"rule_config":"{\"queries\":[{\"prom_ql\":\"up == 1\"}]}","disabled":0,"severity":2,"create_at":1234567890,"create_by":"admin","update_at":1234567890,"update_by":"admin"}`), Err: ""})
 		case r.Method == "PUT":
-			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`null`), Err: ""})
+			_ = json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`null`), Err: ""})
 		case r.Method == "DELETE":
-			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`null`), Err: ""})
+			_ = json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`null`), Err: ""})
 		}
 	}))
 	defer server.Close()
 
 	c, _ := New(server.URL, "token", 30, false, "test")
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create
 	rule := &AlertRule{
@@ -283,25 +285,25 @@ func TestClientNotifyRuleCRUD(t *testing.T) {
 		lastMethod = r.Method
 		lastPath = r.URL.Path
 		if r.Body != nil {
-			json.NewDecoder(r.Body).Decode(&lastBody)
+			_ = json.NewDecoder(r.Body).Decode(&lastBody)
 		}
 
 		w.WriteHeader(http.StatusOK)
 		switch r.Method {
 		case "POST":
-			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`[{"id":11,"name":"test-notify","enable":1}]`), Err: ""})
+			_ = json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`[{"id":11,"name":"test-notify","enable":1}]`), Err: ""})
 		case "GET":
-			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":11,"name":"test-notify","enable":1,"user_group_ids":[1],"notify_configs":[{"channel_id":1}]}`), Err: ""})
+			_ = json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":11,"name":"test-notify","enable":1,"user_group_ids":[1],"notify_configs":[{"channel_id":1}]}`), Err: ""})
 		case "PUT":
-			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":11,"name":"updated-notify","enable":1}`), Err: ""})
+			_ = json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":11,"name":"updated-notify","enable":1}`), Err: ""})
 		case "DELETE":
-			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`null`), Err: ""})
+			_ = json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`null`), Err: ""})
 		}
 	}))
 	defer server.Close()
 
 	c, _ := New(server.URL, "token", 30, false, "test")
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create
 	rule := &NotifyRule{
@@ -367,25 +369,25 @@ func TestClientAlertSubscribeCRUD(t *testing.T) {
 		lastMethod = r.Method
 		lastPath = r.URL.Path
 		if r.Body != nil {
-			json.NewDecoder(r.Body).Decode(&lastBody)
+			_ = json.NewDecoder(r.Body).Decode(&lastBody)
 		}
 
 		w.WriteHeader(http.StatusOK)
 		switch r.Method {
 		case "POST":
-			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":22,"name":"test-sub","group_id":2}`), Err: ""})
+			_ = json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":22,"name":"test-sub","group_id":2}`), Err: ""})
 		case "GET":
-			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":22,"name":"test-sub","group_id":2,"disabled":0,"rule_ids":[1],"user_group_ids":[1]}`), Err: ""})
+			_ = json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":22,"name":"test-sub","group_id":2,"disabled":0,"rule_ids":[1],"user_group_ids":[1]}`), Err: ""})
 		case "PUT":
-			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`null`), Err: ""})
+			_ = json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`null`), Err: ""})
 		case "DELETE":
-			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`null`), Err: ""})
+			_ = json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`null`), Err: ""})
 		}
 	}))
 	defer server.Close()
 
 	c, _ := New(server.URL, "token", 30, false, "test")
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create
 	sub := &AlertSubscribe{

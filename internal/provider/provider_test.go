@@ -9,15 +9,18 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/provider"
-	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
-	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 )
 
-var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServer, error){
-	"nightingale": providerserver.NewProtocol6WithError(New("test")()),
+func newTestProvider(t *testing.T) *NightingaleProvider {
+	t.Helper()
+	p, ok := New("test")().(*NightingaleProvider)
+	if !ok {
+		t.Fatal("expected *NightingaleProvider")
+	}
+	return p
 }
 
 func providerConfigValue(endpoint, token string, timeout int64, insecure bool) tfsdk.Config {
@@ -54,7 +57,7 @@ func providerConfigValue(endpoint, token string, timeout int64, insecure bool) t
 	}
 	values["insecure_skip_tls_verify"] = tftypes.NewValue(tftypes.Bool, insecure)
 
-	p := New("test")().(*NightingaleProvider)
+	p := New("test")()
 	var schemaResp provider.SchemaResponse
 	p.Schema(context.Background(), provider.SchemaRequest{}, &schemaResp)
 
@@ -65,9 +68,9 @@ func providerConfigValue(endpoint, token string, timeout int64, insecure bool) t
 }
 
 func TestProviderSchemaTokenSensitive(t *testing.T) {
-	p := New("test")().(*NightingaleProvider)
+	p := newTestProvider(t)
 	var resp provider.SchemaResponse
-	p.Schema(context.Background(), provider.SchemaRequest{}, &resp)
+	p.Schema(t.Context(), provider.SchemaRequest{}, &resp)
 
 	if resp.Schema.Attributes["token"] == nil {
 		t.Fatal("token attribute not found in schema")
@@ -81,9 +84,9 @@ func TestProviderConfigurationMissingValues(t *testing.T) {
 	os.Unsetenv("NIGHTINGALE_ENDPOINT")
 	os.Unsetenv("NIGHTINGALE_TOKEN")
 
-	p := New("test")().(*NightingaleProvider)
+	p := newTestProvider(t)
 	var resp provider.ConfigureResponse
-	p.Configure(context.Background(), provider.ConfigureRequest{
+	p.Configure(t.Context(), provider.ConfigureRequest{
 		Config: providerConfigValue("", "", 0, false),
 	}, &resp)
 	if !resp.Diagnostics.HasError() {
@@ -95,9 +98,9 @@ func TestProviderConfigurationInvalidEndpoint(t *testing.T) {
 	os.Unsetenv("NIGHTINGALE_ENDPOINT")
 	os.Unsetenv("NIGHTINGALE_TOKEN")
 
-	p := New("test")().(*NightingaleProvider)
+	p := newTestProvider(t)
 	var resp provider.ConfigureResponse
-	p.Configure(context.Background(), provider.ConfigureRequest{
+	p.Configure(t.Context(), provider.ConfigureRequest{
 		Config: providerConfigValue("ftp://invalid", "token", 30, false),
 	}, &resp)
 	if !resp.Diagnostics.HasError() {
@@ -106,16 +109,12 @@ func TestProviderConfigurationInvalidEndpoint(t *testing.T) {
 }
 
 func TestProviderEnvironmentFallback(t *testing.T) {
-	os.Setenv("NIGHTINGALE_ENDPOINT", "http://localhost:8080")
-	os.Setenv("NIGHTINGALE_TOKEN", "env-token")
-	defer func() {
-		os.Unsetenv("NIGHTINGALE_ENDPOINT")
-		os.Unsetenv("NIGHTINGALE_TOKEN")
-	}()
+	t.Setenv("NIGHTINGALE_ENDPOINT", "http://localhost:8080")
+	t.Setenv("NIGHTINGALE_TOKEN", "env-token")
 
-	p := New("test")().(*NightingaleProvider)
+	p := newTestProvider(t)
 	var resp provider.ConfigureResponse
-	p.Configure(context.Background(), provider.ConfigureRequest{
+	p.Configure(t.Context(), provider.ConfigureRequest{
 		Config: providerConfigValue("", "", 0, false),
 	}, &resp)
 	if resp.Diagnostics.HasError() {
@@ -124,8 +123,8 @@ func TestProviderEnvironmentFallback(t *testing.T) {
 }
 
 func TestProviderResourceRegistration(t *testing.T) {
-	p := New("test")().(*NightingaleProvider)
-	resources := p.Resources(context.Background())
+	p := newTestProvider(t)
+	resources := p.Resources(t.Context())
 	if len(resources) != 3 {
 		t.Fatalf("expected 3 resources, got %d", len(resources))
 	}
@@ -139,7 +138,7 @@ func TestProviderResourceRegistration(t *testing.T) {
 	for _, factory := range resources {
 		res := factory()
 		var metaResp resource.MetadataResponse
-		res.Metadata(context.Background(), resource.MetadataRequest{ProviderTypeName: "nightingale"}, &metaResp)
+		res.Metadata(t.Context(), resource.MetadataRequest{ProviderTypeName: "nightingale"}, &metaResp)
 		if _, ok := expectedTypes[metaResp.TypeName]; !ok {
 			t.Errorf("unexpected resource type: %s", metaResp.TypeName)
 		}

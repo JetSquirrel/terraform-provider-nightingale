@@ -4,7 +4,6 @@
 package provider
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -52,7 +51,7 @@ func TestAlertRuleResourceExtraJSONValidator(t *testing.T) {
 
 	// Valid JSON object
 	var validResp validator.StringResponse
-	v.ValidateString(context.Background(), validator.StringRequest{
+	v.ValidateString(t.Context(), validator.StringRequest{
 		ConfigValue: types.StringValue(`{"key":"value"}`),
 	}, &validResp)
 	if validResp.Diagnostics.HasError() {
@@ -61,7 +60,7 @@ func TestAlertRuleResourceExtraJSONValidator(t *testing.T) {
 
 	// Invalid JSON
 	var invalidResp validator.StringResponse
-	v.ValidateString(context.Background(), validator.StringRequest{
+	v.ValidateString(t.Context(), validator.StringRequest{
 		ConfigValue: types.StringValue(`not json`),
 	}, &invalidResp)
 	if !invalidResp.Diagnostics.HasError() {
@@ -70,7 +69,7 @@ func TestAlertRuleResourceExtraJSONValidator(t *testing.T) {
 
 	// Null/unknown/empty should pass
 	var nullResp validator.StringResponse
-	v.ValidateString(context.Background(), validator.StringRequest{
+	v.ValidateString(t.Context(), validator.StringRequest{
 		ConfigValue: types.StringNull(),
 	}, &nullResp)
 	if nullResp.Diagnostics.HasError() {
@@ -80,7 +79,7 @@ func TestAlertRuleResourceExtraJSONValidator(t *testing.T) {
 
 func TestAlertRuleResourceRefreshState(t *testing.T) {
 	r := &AlertRuleResource{}
-	ctx := context.Background()
+	ctx := t.Context()
 
 	state := &AlertRuleResourceModel{
 		ID:          types.StringValue("123"),
@@ -159,7 +158,7 @@ func TestAlertRuleResourceRefreshState(t *testing.T) {
 }
 
 func TestAlertRuleResourceExpandQueries(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	queryModels := []AlertRuleQueryModel{
 		{
@@ -259,7 +258,7 @@ func TestAlertRuleResourceHelpers(t *testing.T) {
 func TestAlertRuleResourceReadRemovesStateWhenNotFound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("not found"))
+		_, _ = w.Write([]byte("not found"))
 	}))
 	defer server.Close()
 
@@ -270,7 +269,7 @@ func TestAlertRuleResourceReadRemovesStateWhenNotFound(t *testing.T) {
 	// correctly identifies the error, and the resource's Read method
 	// would call resp.State.RemoveResource(ctx) when the client
 	// returns an error matching isNotFound.
-	_, err := c.GetAlertRule(context.Background(), 999)
+	_, err := c.GetAlertRule(t.Context(), 999)
 	if err == nil {
 		t.Fatal("expected error for not found")
 	}
@@ -282,14 +281,14 @@ func TestAlertRuleResourceReadRemovesStateWhenNotFound(t *testing.T) {
 func TestAlertRuleResourceDeleteToleratesNotFound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("not found"))
+		_, _ = w.Write([]byte("not found"))
 	}))
 	defer server.Close()
 
 	c, _ := client.New(server.URL, "token", 30, false, "test")
 
 	// Verify the client error is tolerated by isNotFound
-	err := c.DeleteAlertRules(context.Background(), 1, []int64{999})
+	err := c.DeleteAlertRules(t.Context(), 1, []int64{999})
 	if err == nil {
 		t.Fatal("expected error from client")
 	}

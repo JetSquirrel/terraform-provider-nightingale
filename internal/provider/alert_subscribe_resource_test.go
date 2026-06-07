@@ -4,7 +4,6 @@
 package provider
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,7 +14,7 @@ import (
 
 func TestAlertSubscribeResourceRefreshState(t *testing.T) {
 	r := &AlertSubscribeResource{}
-	ctx := context.Background()
+	ctx := t.Context()
 
 	state := &AlertSubscribeResourceModel{
 		ID:          types.StringValue("22"),
@@ -105,12 +104,12 @@ func TestAlertSubscribeResourceToAPI(t *testing.T) {
 func TestAlertSubscribeResourceReadNotFound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("not found"))
+		_, _ = w.Write([]byte("not found"))
 	}))
 	defer server.Close()
 
 	c, _ := client.New(server.URL, "token", 30, false, "test")
-	_, err := c.GetAlertSubscribe(context.Background(), 999)
+	_, err := c.GetAlertSubscribe(t.Context(), 999)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -122,12 +121,12 @@ func TestAlertSubscribeResourceReadNotFound(t *testing.T) {
 func TestAlertSubscribeResourceDeleteToleratesNotFound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("not found"))
+		_, _ = w.Write([]byte("not found"))
 	}))
 	defer server.Close()
 
 	c, _ := client.New(server.URL, "token", 30, false, "test")
-	err := c.DeleteAlertSubscribes(context.Background(), 1, []int64{999})
+	err := c.DeleteAlertSubscribes(t.Context(), 1, []int64{999})
 	if err == nil {
 		t.Fatal("expected error from client")
 	}

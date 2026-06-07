@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package client
 
 import (
@@ -94,6 +97,10 @@ func ParseRuleConfig(ruleConfig string) ([]AlertRuleQuery, error) {
 }
 
 func toPayload(rule *AlertRule, extra map[string]interface{}) (map[string]interface{}, error) {
+	if rule == nil {
+		return nil, fmt.Errorf("alert rule is nil")
+	}
+
 	payload := map[string]interface{}{
 		"name":              rule.Name,
 		"cate":              rule.DatasourceType,
