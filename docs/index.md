@@ -1,6 +1,6 @@
 # Nightingale Provider
 
-The Nightingale provider allows you to manage [Nightingale](https://github.com/ccfos/nightingale) alert rules using Terraform.
+The Nightingale provider allows you to manage [Nightingale](https://github.com/ccfos/nightingale) resources using Terraform.
 
 ## Example Usage
 
@@ -10,6 +10,12 @@ provider "nightingale" {
   token    = var.nightingale_token
 }
 ```
+
+## Resources
+
+- `nightingale_alert_rule`
+- `nightingale_notify_rule`
+- `nightingale_alert_subscribe`
 
 ## Schema
 
