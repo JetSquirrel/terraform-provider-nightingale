@@ -114,10 +114,12 @@ func (r *AlertRuleResource) Schema(ctx context.Context, req resource.SchemaReque
 						"comparison_operator": schema.StringAttribute{
 							MarkdownDescription: "Operator if Nightingale version uses threshold conditions outside PromQL.",
 							Optional:            true,
+							Computed:            true,
 						},
 						"threshold": schema.Float64Attribute{
 							MarkdownDescription: "Threshold if Nightingale version uses threshold conditions outside PromQL.",
 							Optional:            true,
+							Computed:            true,
 						},
 					},
 				},
@@ -135,6 +137,7 @@ func (r *AlertRuleResource) Schema(ctx context.Context, req resource.SchemaReque
 			"datasource_ids": schema.SetAttribute{
 				MarkdownDescription: "Datasource IDs used by the rule.",
 				Optional:            true,
+				Computed:            true,
 				ElementType:         types.Int64Type,
 			},
 			"append_tags": schema.SetAttribute{
@@ -155,6 +158,7 @@ func (r *AlertRuleResource) Schema(ctx context.Context, req resource.SchemaReque
 			"notify_recovered": schema.BoolAttribute{
 				MarkdownDescription: "Whether to notify on recovery.",
 				Optional:            true,
+				Computed:            true,
 			},
 			"notify_channels": schema.SetAttribute{
 				MarkdownDescription: "Notification channels if supported by the target Nightingale version.",
@@ -164,6 +168,7 @@ func (r *AlertRuleResource) Schema(ctx context.Context, req resource.SchemaReque
 			"runbook_url": schema.StringAttribute{
 				MarkdownDescription: "Optional runbook URL if supported/mapped through annotations.",
 				Optional:            true,
+				Computed:            true,
 			},
 			"extra_json": schema.StringAttribute{
 				MarkdownDescription: "JSON object merged into API payload for Nightingale-version-specific fields.",
@@ -252,7 +257,7 @@ func (r *AlertRuleResource) Create(ctx context.Context, req resource.CreateReque
 		DatasourceIDs:   setToInt64Slice(plan.DatasourceIDs),
 		Disabled:        boolToInt(plan.Disabled.ValueBool()),
 		Severity:        plan.Severity.ValueInt64(),
-		RuleConfig:      ruleConfig,
+		RuleConfig:      client.FlexibleRuleConfig(ruleConfig),
 		PromForDuration: promForDuration,
 		AppendTags:      setToStringSlice(plan.AppendTags),
 		Annotations:     mapToStringMap(plan.Annotations),
@@ -345,7 +350,7 @@ func (r *AlertRuleResource) Update(ctx context.Context, req resource.UpdateReque
 		DatasourceIDs:   setToInt64Slice(plan.DatasourceIDs),
 		Disabled:        boolToInt(plan.Disabled.ValueBool()),
 		Severity:        plan.Severity.ValueInt64(),
-		RuleConfig:      ruleConfig,
+		RuleConfig:      client.FlexibleRuleConfig(ruleConfig),
 		PromForDuration: promForDuration,
 		AppendTags:      setToStringSlice(plan.AppendTags),
 		Annotations:     mapToStringMap(plan.Annotations),
@@ -434,8 +439,6 @@ func (r *AlertRuleResource) refreshState(ctx context.Context, state *AlertRuleRe
 		if !diags.HasError() {
 			state.DatasourceIDs = setValue
 		}
-	} else {
-		state.DatasourceIDs = types.SetNull(types.Int64Type)
 	}
 
 	if len(rule.AppendTags) > 0 {
@@ -476,7 +479,7 @@ func (r *AlertRuleResource) refreshState(ctx context.Context, state *AlertRuleRe
 
 	state.NotifyRecovered = types.BoolValue(rule.NotifyRecovered != 0)
 
-	queries, err := client.ParseRuleConfig(rule.RuleConfig)
+	queries, err := client.ParseRuleConfig(string(rule.RuleConfig))
 	if err == nil && len(queries) > 0 {
 		queryModels := make([]AlertRuleQueryModel, 0, len(queries))
 		for _, q := range queries {

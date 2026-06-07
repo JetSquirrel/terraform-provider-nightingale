@@ -15,27 +15,54 @@ type AlertRuleQuery struct {
 	Threshold          float64 `json:"threshold,omitempty"`
 }
 
+// FlexibleRuleConfig handles rule_config that can be either a string or an object.
+type FlexibleRuleConfig string
+
+func (f *FlexibleRuleConfig) UnmarshalJSON(data []byte) error {
+	if len(data) == 0 || string(data) == "null" {
+		*f = ""
+		return nil
+	}
+	if data[0] == '"' {
+		var s string
+		if err := json.Unmarshal(data, &s); err != nil {
+			return err
+		}
+		*f = FlexibleRuleConfig(s)
+		return nil
+	}
+	*f = FlexibleRuleConfig(string(data))
+	return nil
+}
+
+func (f FlexibleRuleConfig) MarshalJSON() ([]byte, error) {
+	if f == "" {
+		return []byte(`""`), nil
+	}
+	return []byte(f), nil
+}
+
 // AlertRule represents a Nightingale alert rule.
 type AlertRule struct {
-	ID              int64             `json:"id"`
-	GroupID         int64             `json:"group_id"`
-	Name            string            `json:"name"`
-	DatasourceType  string            `json:"cate"`
-	DatasourceIDs   []int64           `json:"datasource_ids"`
-	Disabled        int               `json:"disabled"`
-	Severity        int64             `json:"severity"`
-	RuleConfig      string            `json:"rule_config"`
-	PromForDuration int64             `json:"prom_for_duration"`
-	AppendTags      []string          `json:"append_tags"`
-	Annotations     map[string]string `json:"annotations"`
-	NotifyChannels  []string          `json:"notify_channels"`
-	NotifyRecovered int               `json:"notify_recovered"`
-	NotifyRuleIDs   []int64           `json:"notify_rule_ids"`
-	RunbookURL      string            `json:"runbook_url"`
-	CreateAt        int64             `json:"create_at"`
-	CreateBy        string            `json:"create_by"`
-	UpdateAt        int64             `json:"update_at"`
-	UpdateBy        string            `json:"update_by"`
+	ID              int64              `json:"id"`
+	GroupID         int64              `json:"group_id"`
+	Name            string             `json:"name"`
+	DatasourceType  string             `json:"cate"`
+	DatasourceIDs   []int64            `json:"datasource_ids"`
+	Disabled        int                `json:"disabled"`
+	Severity        int64              `json:"severity"`
+	RuleConfig      FlexibleRuleConfig `json:"rule_config"`
+	PromForDuration int64              `json:"prom_for_duration"`
+	AppendTags      []string           `json:"append_tags"`
+	Annotations     map[string]string  `json:"annotations"`
+	NotifyChannels  []string           `json:"notify_channels"`
+	NotifyRecovered int                `json:"notify_recovered"`
+	NotifyRuleIDs   []int64            `json:"notify_rule_ids"`
+	RunbookURL      string             `json:"runbook_url"`
+	CreateAt        int64              `json:"create_at"`
+	CreateBy        string             `json:"create_by"`
+	UpdateAt        int64              `json:"update_at"`
+	UpdateBy        string             `json:"update_by"`
 }
 
 // RuleConfigPayload is the structure stored in the RuleConfig JSON field.
@@ -66,22 +93,6 @@ func ParseRuleConfig(ruleConfig string) ([]AlertRuleQuery, error) {
 	return cfg.Queries, nil
 }
 
-type alertRulePayload struct {
-	Name            string            `json:"name"`
-	Cate            string            `json:"cate"`
-	DatasourceIDs   []int64           `json:"datasource_ids,omitempty"`
-	Disabled        int               `json:"disabled,omitempty"`
-	Severity        int64             `json:"severity,omitempty"`
-	RuleConfig      string            `json:"rule_config,omitempty"`
-	PromForDuration int64             `json:"prom_for_duration,omitempty"`
-	AppendTags      []string          `json:"append_tags,omitempty"`
-	Annotations     map[string]string `json:"annotations,omitempty"`
-	NotifyChannels  []string          `json:"notify_channels,omitempty"`
-	NotifyRecovered int               `json:"notify_recovered,omitempty"`
-	NotifyRuleIDs   []int64           `json:"notify_rule_ids,omitempty"`
-	RunbookURL      string            `json:"runbook_url,omitempty"`
-}
-
 func toPayload(rule *AlertRule, extra map[string]interface{}) (map[string]interface{}, error) {
 	payload := map[string]interface{}{
 		"name":              rule.Name,
@@ -89,7 +100,7 @@ func toPayload(rule *AlertRule, extra map[string]interface{}) (map[string]interf
 		"datasource_ids":    rule.DatasourceIDs,
 		"disabled":          rule.Disabled,
 		"severity":          rule.Severity,
-		"rule_config":       rule.RuleConfig,
+		"rule_config":       string(rule.RuleConfig),
 		"prom_for_duration": rule.PromForDuration,
 		"append_tags":       rule.AppendTags,
 		"annotations":       rule.Annotations,
@@ -106,6 +117,23 @@ func toPayload(rule *AlertRule, extra map[string]interface{}) (map[string]interf
 	return payload, nil
 }
 
+// ListAlertRules lists all alert rules in a business group.
+func (c *Client) ListAlertRules(ctx context.Context, groupID int64) ([]AlertRule, error) {
+	uri := fmt.Sprintf("/api/n9e/busi-group/%d/alert-rules", groupID)
+
+	env, err := c.doRequest(ctx, "GET", uri, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list alert rules: %w", err)
+	}
+
+	var rules []AlertRule
+	if err := json.Unmarshal(env.Dat, &rules); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal alert rules: %w", err)
+	}
+
+	return rules, nil
+}
+
 // CreateAlertRule creates a new alert rule in the specified business group.
 func (c *Client) CreateAlertRule(ctx context.Context, groupID int64, rule *AlertRule, extra map[string]interface{}) (*AlertRule, error) {
 	uri := fmt.Sprintf("/api/n9e/busi-group/%d/alert-rules", groupID)
@@ -115,17 +143,30 @@ func (c *Client) CreateAlertRule(ctx context.Context, groupID int64, rule *Alert
 		return nil, err
 	}
 
-	env, err := c.doRequest(ctx, "POST", uri, payload)
+	_, err = c.doRequest(ctx, "POST", uri, []map[string]interface{}{payload})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create alert rule: %w", err)
 	}
 
-	var created AlertRule
-	if err := json.Unmarshal(env.Dat, &created); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal created alert rule: %w", err)
+	rules, err := c.ListAlertRules(ctx, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch created alert rule: %w", err)
 	}
 
-	return &created, nil
+	var latestRule *AlertRule
+	for i := range rules {
+		if rules[i].Name == rule.Name {
+			if latestRule == nil || rules[i].CreateAt > latestRule.CreateAt {
+				latestRule = &rules[i]
+			}
+		}
+	}
+
+	if latestRule == nil {
+		return nil, fmt.Errorf("created alert rule not found in list")
+	}
+
+	return latestRule, nil
 }
 
 // GetAlertRule retrieves a single alert rule by ID.
@@ -154,17 +195,12 @@ func (c *Client) UpdateAlertRule(ctx context.Context, groupID, id int64, rule *A
 		return nil, err
 	}
 
-	env, err := c.doRequest(ctx, "PUT", uri, payload)
+	_, err = c.doRequest(ctx, "PUT", uri, payload)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update alert rule: %w", err)
 	}
 
-	var updated AlertRule
-	if err := json.Unmarshal(env.Dat, &updated); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal updated alert rule: %w", err)
-	}
-
-	return &updated, nil
+	return c.GetAlertRule(ctx, id)
 }
 
 // DeleteAlertRules deletes alert rules by IDs in a business group.

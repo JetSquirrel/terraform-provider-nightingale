@@ -1,25 +1,29 @@
 # Terraform Provider for Nightingale
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/JetSquirrel/terraform-provider-nightingale)](https://goreportcard.com/report/github.com/JetSquirrel/terraform-provider-nightingale)
+[![License](https://img.shields.io/badge/License-MPL%202.0-blue.svg)](LICENSE)
 
-This Terraform provider manages [Nightingale](https://github.com/ccfos/nightingale) resources via the Nightingale page-operation API.
+[English](README.md) | [中文](README_CN.md)
+
+Terraform provider for managing [Nightingale](https://github.com/ccfos/nightingale) (n9e) monitoring resources.
+
+## Features
+
+- Manage alert rules with PromQL queries
+- Configure notification rules with multiple channels
+- Set up alert subscriptions for teams
+- Full CRUD support with import capability
+- Compatible with Nightingale v9.x API
 
 ## Requirements
 
 - [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.0
-- [Go](https://golang.org/doc/install) >= 1.25 (for building from source)
+- [Go](https://golang.org/doc/install) >= 1.21 (for building from source)
+- Nightingale v8.0+ (tested with v9.x)
 
-## Supported Resources
+## Installation
 
-| Resource | Description | Import Format |
-|----------|-------------|---------------|
-| [`nightingale_alert_rule`](docs/resources/alert_rule.md) | Alert rules with PromQL queries | `busi_group_id:id` |
-| [`nightingale_notify_rule`](docs/resources/notify_rule.md) | Notification rules with channel configs | `id` |
-| [`nightingale_alert_subscribe`](docs/resources/alert_subscribe.md) | Alert subscription rules | `busi_group_id:id` |
-
-## Quick Start
-
-### Provider Configuration
+### From Terraform Registry
 
 ```terraform
 terraform {
@@ -30,136 +34,144 @@ terraform {
     }
   }
 }
+```
 
+### From Source
+
+```shell
+git clone https://github.com/JetSquirrel/terraform-provider-nightingale.git
+cd terraform-provider-nightingale
+go install
+```
+
+## Quick Start
+
+### 1. Configure Provider
+
+```terraform
 provider "nightingale" {
   endpoint = "https://n9e.example.com"
   token    = var.nightingale_token
 }
 ```
 
-### Environment Variables
+Or use environment variables:
 
-All provider attributes can be set via environment variables:
+```shell
+export NIGHTINGALE_ENDPOINT="https://n9e.example.com"
+export NIGHTINGALE_TOKEN="your-api-token"
+```
 
-| Attribute | Environment Variable | Required |
-|-----------|---------------------|----------|
-| `endpoint` | `NIGHTINGALE_ENDPOINT` | yes |
-| `token` | `NIGHTINGALE_TOKEN` | yes |
-| `timeout_seconds` | `NIGHTINGALE_TIMEOUT_SECONDS` | no (default: 30) |
-| `insecure_skip_tls_verify` | `NIGHTINGALE_INSECURE_SKIP_TLS_VERIFY` | no (default: false) |
+### 2. Get API Token
 
-### Resource Examples
+1. Log in to Nightingale web UI
+2. Go to **Profile** (top-right avatar) > **Token Management**
+3. Click **Create Token**
+4. Copy the generated token
 
-#### Alert Rule
+> **Note:** Ensure `[HTTP.TokenAuth] Enable = true` is set in Nightingale's `config.toml`.
+
+### 3. Create Resources
 
 ```terraform
+# Alert rule for high CPU usage
 resource "nightingale_alert_rule" "high_cpu" {
   busi_group_id   = 1
-  name            = "High CPU usage"
+  name            = "High CPU Usage"
   datasource_type = "prometheus"
   datasource_ids  = [1]
   severity        = 2
 
   queries = [{
     ref              = "A"
-    promql           = "100 - avg by (ident) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100"
+    promql           = "100 - avg by (ident) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100 > 80"
     duration_seconds = 300
   }]
 
   annotations = {
-    summary     = "High CPU usage on {{ $labels.ident }}"
-    description = "CPU usage has been high for 5 minutes."
+    summary     = "High CPU on {{ $labels.ident }}"
+    description = "CPU usage exceeded 80% for 5 minutes."
   }
 
-  append_tags = [
-    "managed_by=terraform",
-  ]
+  append_tags = ["managed_by=terraform"]
 }
 ```
 
-#### Notification Rule
+## Supported Resources
 
-```terraform
-resource "nightingale_notify_rule" "email_ops" {
-  name           = "Email OPS"
-  enable         = true
-  user_group_ids = [1]
+| Resource | Description | Import Format |
+|----------|-------------|---------------|
+| [`nightingale_alert_rule`](docs/resources/alert_rule.md) | Alert rules with PromQL queries | `busi_group_id:id` |
+| [`nightingale_notify_rule`](docs/resources/notify_rule.md) | Notification rules | `id` |
+| [`nightingale_alert_subscribe`](docs/resources/alert_subscribe.md) | Alert subscriptions | `busi_group_id:id` |
 
-  notify_configs = [{
-    channel_id  = 1
-    template_id = 1
-  }]
-}
-```
+## Provider Configuration
 
-#### Alert Subscription
+| Attribute | Environment Variable | Required | Default | Description |
+|-----------|---------------------|----------|---------|-------------|
+| `endpoint` | `NIGHTINGALE_ENDPOINT` | Yes | - | Nightingale API URL |
+| `token` | `NIGHTINGALE_TOKEN` | Yes | - | API token (X-User-Token) |
+| `timeout_seconds` | `NIGHTINGALE_TIMEOUT_SECONDS` | No | 30 | HTTP timeout |
+| `insecure_skip_tls_verify` | `NIGHTINGALE_INSECURE_SKIP_TLS_VERIFY` | No | false | Skip TLS verification |
 
-```terraform
-resource "nightingale_alert_subscribe" "ops_critical" {
-  busi_group_id   = 1
-  name            = "OPS Critical"
-  rule_ids        = [10, 11]
-  severities      = [1, 2]
-  user_group_ids  = [5]
-  notify_rule_ids = [3]
-}
-```
+## Examples
 
-### Import
+See the [examples](examples/) directory for complete configurations:
+
+- [Provider setup](examples/provider/)
+- [Complete example](examples/complete/) - Multiple resources working together
+- [Individual resources](examples/resources/)
+
+## Import Existing Resources
 
 ```shell
-terraform import nightingale_alert_rule.high_cpu 1:123
-terraform import nightingale_notify_rule.email_ops 456
-terraform import nightingale_alert_subscribe.ops_critical 1:789
+# Alert rule
+terraform import nightingale_alert_rule.example 1:123
+
+# Notification rule
+terraform import nightingale_notify_rule.example 456
+
+# Alert subscription
+terraform import nightingale_alert_subscribe.example 1:789
 ```
 
-## Building from Source
+## Development
+
+### Build
 
 ```shell
-git clone https://github.com/JetSquirrel/terraform-provider-nightingale.git
-cd terraform-provider-nightingale
-go build -v ./...
+make build
 ```
 
-Install the provider locally:
+### Test
 
 ```shell
-go install
-```
+# Unit tests
+make test
 
-## Testing
-
-Run unit tests:
-
-```shell
-go test ./...
-```
-
-Run acceptance tests (requires a live Nightingale instance):
-
-```shell
+# Acceptance tests (requires live Nightingale instance)
 export TF_ACC=1
-export NIGHTINGALE_ENDPOINT="https://n9e.example.com"
+export NIGHTINGALE_ENDPOINT="http://localhost:17000"
 export NIGHTINGALE_TOKEN="your-token"
-export NIGHTINGALE_BUSI_GROUP_ID=1
-go test ./... -run 'TestAcc'
+make testacc
 ```
 
-## Documentation Generation
-
-Documentation is generated from schema definitions:
+### Generate Documentation
 
 ```shell
 make generate
 ```
 
-## Documentation
+## Contributing
 
-- [Provider Configuration](docs/index.md)
-- [Alert Rule](docs/resources/alert_rule.md)
-- [Notification Rule](docs/resources/notify_rule.md)
-- [Alert Subscription](docs/resources/alert_subscribe.md)
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-MPL-2.0
+[MPL-2.0](LICENSE)
+
+## Links
+
+- [Nightingale Project](https://github.com/ccfos/nightingale)
+- [Nightingale Documentation](https://flashcat.cloud/docs/)
+- [Terraform Registry](https://registry.terraform.io/providers/JetSquirrel/nightingale)

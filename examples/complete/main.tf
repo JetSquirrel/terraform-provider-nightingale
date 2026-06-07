@@ -3,9 +3,9 @@ provider "nightingale" {
   token    = var.nightingale_token
 }
 
-# Notification rule for email alerts
-resource "nightingale_notify_rule" "email_ops" {
-  name           = "Email OPS Team"
+# Notification rule
+resource "nightingale_notify_rule" "ops" {
+  name           = "OPS Team Notifications"
   enable         = true
   user_group_ids = [1]
 
@@ -15,18 +15,40 @@ resource "nightingale_notify_rule" "email_ops" {
   }]
 }
 
-# Critical alert rule: disk nearly full
-resource "nightingale_alert_rule" "disk_critical" {
-  busi_group_id    = var.busi_group_id
-  name             = "Disk nearly full"
-  datasource_type  = "prometheus"
-  datasource_ids   = [var.datasource_id]
-  severity         = 1
-  notify_recovered = true
+# Alert rule: High CPU
+resource "nightingale_alert_rule" "high_cpu" {
+  busi_group_id   = var.busi_group_id
+  name            = "High CPU Usage"
+  datasource_type = "prometheus"
+  datasource_ids  = [var.datasource_id]
+  severity        = 2
 
   queries = [{
     ref              = "A"
-    promql           = "node_filesystem_avail_bytes{fstype!~\"tmpfs|squashfs\"} / node_filesystem_size_bytes * 100 < 10"
+    promql           = "100 - avg by (ident) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100 > 80"
+    duration_seconds = 300
+  }]
+
+  annotations = {
+    summary     = "High CPU on {{ $labels.ident }}"
+    description = "CPU usage exceeded 80% for 5 minutes."
+  }
+
+  append_tags     = ["managed_by=terraform"]
+  notify_rule_ids = [nightingale_notify_rule.ops.id]
+}
+
+# Alert rule: Disk Full
+resource "nightingale_alert_rule" "disk_full" {
+  busi_group_id   = var.busi_group_id
+  name            = "Disk Nearly Full"
+  datasource_type = "prometheus"
+  datasource_ids  = [var.datasource_id]
+  severity        = 1
+
+  queries = [{
+    ref              = "A"
+    promql           = "node_filesystem_avail_bytes / node_filesystem_size_bytes * 100 < 10"
     duration_seconds = 600
   }]
 
@@ -35,52 +57,18 @@ resource "nightingale_alert_rule" "disk_critical" {
     description = "Available disk space is below 10%."
   }
 
-  append_tags = [
-    "severity=critical",
-    "team=ops",
-    "managed_by=terraform",
-  ]
-
-  notify_rule_ids = [nightingale_notify_rule.email_ops.id]
+  append_tags     = ["managed_by=terraform", "severity=critical"]
+  notify_rule_ids = [nightingale_notify_rule.ops.id]
 }
 
-# Warning alert rule: high CPU
-resource "nightingale_alert_rule" "cpu_warning" {
-  busi_group_id    = var.busi_group_id
-  name             = "High CPU usage"
-  datasource_type  = "prometheus"
-  datasource_ids   = [var.datasource_id]
-  severity         = 2
-  notify_recovered = true
-
-  queries = [{
-    ref              = "A"
-    promql           = "100 - avg by (ident) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100"
-    duration_seconds = 300
-  }]
-
-  annotations = {
-    summary     = "High CPU usage on {{ $labels.ident }}"
-    description = "CPU usage has been above threshold for 5 minutes."
-  }
-
-  append_tags = [
-    "severity=warning",
-    "managed_by=terraform",
-  ]
-
-  notify_rule_ids = [nightingale_notify_rule.email_ops.id]
-}
-
-# Subscription for critical alerts to the ops team
-resource "nightingale_alert_subscribe" "ops_critical" {
+# Alert subscription
+resource "nightingale_alert_subscribe" "critical" {
   busi_group_id = var.busi_group_id
-  name          = "OPS Critical Subscription"
+  name          = "Critical Alerts Subscription"
   disabled      = false
 
-  rule_ids   = [nightingale_alert_rule.disk_critical.id]
-  severities = [1]
-
+  rule_ids        = [nightingale_alert_rule.disk_full.id]
+  severities      = [1]
   user_group_ids  = [1]
-  notify_rule_ids = [nightingale_notify_rule.email_ops.id]
+  notify_rule_ids = [nightingale_notify_rule.ops.id]
 }

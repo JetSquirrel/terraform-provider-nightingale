@@ -1,16 +1,10 @@
 variable "nightingale_endpoint" {
-  description = "Base URL for the Nightingale center API."
+  description = "Nightingale API endpoint URL."
   type        = string
 }
 
 variable "nightingale_token" {
-  description = "User token sent as X-User-Token."
+  description = "Nightingale API token."
   type        = string
   sensitive   = true
-}
-
-variable "busi_group_id" {
-  description = "Default business group ID for Nightingale resources."
-  type        = number
-  default     = 1
 }

@@ -78,6 +78,9 @@ func TestProviderSchemaTokenSensitive(t *testing.T) {
 }
 
 func TestProviderConfigurationMissingValues(t *testing.T) {
+	os.Unsetenv("NIGHTINGALE_ENDPOINT")
+	os.Unsetenv("NIGHTINGALE_TOKEN")
+
 	p := New("test")().(*NightingaleProvider)
 	var resp provider.ConfigureResponse
 	p.Configure(context.Background(), provider.ConfigureRequest{
@@ -89,6 +92,9 @@ func TestProviderConfigurationMissingValues(t *testing.T) {
 }
 
 func TestProviderConfigurationInvalidEndpoint(t *testing.T) {
+	os.Unsetenv("NIGHTINGALE_ENDPOINT")
+	os.Unsetenv("NIGHTINGALE_TOKEN")
+
 	p := New("test")().(*NightingaleProvider)
 	var resp provider.ConfigureResponse
 	p.Configure(context.Background(), provider.ConfigureRequest{

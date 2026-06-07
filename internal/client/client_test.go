@@ -198,14 +198,16 @@ func TestClientAlertRuleCRUD(t *testing.T) {
 		}
 
 		w.WriteHeader(http.StatusOK)
-		switch r.Method {
-		case "POST":
-			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":99,"name":"test-rule","cate":"prometheus","group_id":1}`), Err: ""})
-		case "GET":
-			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":99,"name":"test-rule","cate":"prometheus","group_id":1,"rule_config":"{\"queries\":[{\"prom_ql\":\"up == 1\"}]}","disabled":0,"severity":2,"create_at":1234567890,"create_by":"admin","update_at":1234567890,"update_by":"admin"}`), Err: ""})
-		case "PUT":
-			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":99,"name":"updated-rule","cate":"prometheus","group_id":1}`), Err: ""})
-		case "DELETE":
+		switch {
+		case r.Method == "POST":
+			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"test-rule":""}`), Err: ""})
+		case r.Method == "GET" && r.URL.Path == "/api/n9e/busi-group/1/alert-rules":
+			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`[{"id":99,"name":"test-rule","cate":"prometheus","group_id":1,"rule_config":"{\"queries\":[{\"prom_ql\":\"up == 1\"}]}","disabled":0,"severity":2,"create_at":1234567890,"create_by":"admin","update_at":1234567890,"update_by":"admin"}]`), Err: ""})
+		case r.Method == "GET":
+			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":99,"name":"updated-rule","cate":"prometheus","group_id":1,"rule_config":"{\"queries\":[{\"prom_ql\":\"up == 1\"}]}","disabled":0,"severity":2,"create_at":1234567890,"create_by":"admin","update_at":1234567890,"update_by":"admin"}`), Err: ""})
+		case r.Method == "PUT":
+			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`null`), Err: ""})
+		case r.Method == "DELETE":
 			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`null`), Err: ""})
 		}
 	}))
@@ -219,7 +221,7 @@ func TestClientAlertRuleCRUD(t *testing.T) {
 		Name:           "test-rule",
 		DatasourceType: "prometheus",
 		GroupID:        1,
-		RuleConfig:     `{"queries":[{"prom_ql":"up == 1"}]}`,
+		RuleConfig:     FlexibleRuleConfig(`{"queries":[{"prom_ql":"up == 1"}]}`),
 		Severity:       2,
 	}
 	created, err := c.CreateAlertRule(ctx, 1, rule, nil)
@@ -229,8 +231,8 @@ func TestClientAlertRuleCRUD(t *testing.T) {
 	if created.ID != 99 {
 		t.Errorf("created ID = %d, want 99", created.ID)
 	}
-	if lastMethod != "POST" || lastPath != "/api/n9e/busi-group/1/alert-rules" {
-		t.Errorf("create: %s %s", lastMethod, lastPath)
+	if lastMethod != "GET" || lastPath != "/api/n9e/busi-group/1/alert-rules" {
+		t.Errorf("create should end with list call: %s %s", lastMethod, lastPath)
 	}
 
 	// Read
@@ -238,8 +240,8 @@ func TestClientAlertRuleCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get failed: %v", err)
 	}
-	if got.Name != "test-rule" {
-		t.Errorf("got name = %q, want test-rule", got.Name)
+	if got.Name != "updated-rule" {
+		t.Errorf("got name = %q, want updated-rule", got.Name)
 	}
 	if lastMethod != "GET" || lastPath != "/api/n9e/alert-rule/99" {
 		t.Errorf("get: %s %s", lastMethod, lastPath)
@@ -254,8 +256,8 @@ func TestClientAlertRuleCRUD(t *testing.T) {
 	if updated.Name != "updated-rule" {
 		t.Errorf("updated name = %q, want updated-rule", updated.Name)
 	}
-	if lastMethod != "PUT" || lastPath != "/api/n9e/busi-group/1/alert-rule/99" {
-		t.Errorf("update: %s %s", lastMethod, lastPath)
+	if lastMethod != "GET" || lastPath != "/api/n9e/alert-rule/99" {
+		t.Errorf("update should end with get call: %s %s", lastMethod, lastPath)
 	}
 
 	// Delete
