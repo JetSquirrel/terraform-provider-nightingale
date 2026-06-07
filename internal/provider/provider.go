@@ -132,6 +132,8 @@ func (p *NightingaleProvider) Configure(ctx context.Context, req provider.Config
 func (p *NightingaleProvider) Resources(ctx context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewAlertRuleResource,
+		NewNotifyRuleResource,
+		NewAlertSubscribeResource,
 	}
 }
 

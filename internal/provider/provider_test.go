@@ -120,14 +120,29 @@ func TestProviderEnvironmentFallback(t *testing.T) {
 func TestProviderResourceRegistration(t *testing.T) {
 	p := New("test")().(*NightingaleProvider)
 	resources := p.Resources(context.Background())
-	if len(resources) != 1 {
-		t.Fatalf("expected 1 resource, got %d", len(resources))
+	if len(resources) != 3 {
+		t.Fatalf("expected 3 resources, got %d", len(resources))
 	}
 
-	res := resources[0]()
-	var metaResp resource.MetadataResponse
-	res.Metadata(context.Background(), resource.MetadataRequest{ProviderTypeName: "nightingale"}, &metaResp)
-	if metaResp.TypeName != "nightingale_alert_rule" {
-		t.Errorf("expected resource type nightingale_alert_rule, got %s", metaResp.TypeName)
+	expectedTypes := map[string]bool{
+		"nightingale_alert_rule":      false,
+		"nightingale_notify_rule":     false,
+		"nightingale_alert_subscribe": false,
+	}
+
+	for _, factory := range resources {
+		res := factory()
+		var metaResp resource.MetadataResponse
+		res.Metadata(context.Background(), resource.MetadataRequest{ProviderTypeName: "nightingale"}, &metaResp)
+		if _, ok := expectedTypes[metaResp.TypeName]; !ok {
+			t.Errorf("unexpected resource type: %s", metaResp.TypeName)
+		}
+		expectedTypes[metaResp.TypeName] = true
+	}
+
+	for name, found := range expectedTypes {
+		if !found {
+			t.Errorf("missing resource type: %s", name)
+		}
 	}
 }

@@ -271,3 +271,170 @@ func TestClientAlertRuleCRUD(t *testing.T) {
 		t.Errorf("delete body ids = %v, want [99]", lastBody["ids"])
 	}
 }
+
+func TestClientNotifyRuleCRUD(t *testing.T) {
+	var lastMethod string
+	var lastPath string
+	var lastBody map[string]interface{}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lastMethod = r.Method
+		lastPath = r.URL.Path
+		if r.Body != nil {
+			json.NewDecoder(r.Body).Decode(&lastBody)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		switch r.Method {
+		case "POST":
+			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`[{"id":11,"name":"test-notify","enable":1}]`), Err: ""})
+		case "GET":
+			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":11,"name":"test-notify","enable":1,"user_group_ids":[1],"notify_configs":[{"channel_id":1}]}`), Err: ""})
+		case "PUT":
+			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":11,"name":"updated-notify","enable":1}`), Err: ""})
+		case "DELETE":
+			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`null`), Err: ""})
+		}
+	}))
+	defer server.Close()
+
+	c, _ := New(server.URL, "token", 30, false, "test")
+	ctx := context.Background()
+
+	// Create
+	rule := &NotifyRule{
+		Name:         "test-notify",
+		Enable:       1,
+		UserGroupIds: []int64{1},
+		NotifyConfigs: []NotifyConfig{
+			{ChannelID: 1},
+		},
+	}
+	created, err := c.CreateNotifyRule(ctx, rule)
+	if err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
+	if created.ID != 11 {
+		t.Errorf("created ID = %d, want 11", created.ID)
+	}
+	if lastMethod != "POST" || lastPath != "/api/n9e/notify-rules" {
+		t.Errorf("create: %s %s", lastMethod, lastPath)
+	}
+
+	// Read
+	got, err := c.GetNotifyRule(ctx, 11)
+	if err != nil {
+		t.Fatalf("get failed: %v", err)
+	}
+	if got.Name != "test-notify" {
+		t.Errorf("got name = %q", got.Name)
+	}
+	if lastMethod != "GET" || lastPath != "/api/n9e/notify-rule/11" {
+		t.Errorf("get: %s %s", lastMethod, lastPath)
+	}
+
+	// Update
+	rule.Name = "updated-notify"
+	updated, err := c.UpdateNotifyRule(ctx, 11, rule)
+	if err != nil {
+		t.Fatalf("update failed: %v", err)
+	}
+	if updated.Name != "updated-notify" {
+		t.Errorf("updated name = %q", updated.Name)
+	}
+	if lastMethod != "PUT" || lastPath != "/api/n9e/notify-rule/11" {
+		t.Errorf("update: %s %s", lastMethod, lastPath)
+	}
+
+	// Delete
+	err = c.DeleteNotifyRules(ctx, []int64{11})
+	if err != nil {
+		t.Fatalf("delete failed: %v", err)
+	}
+	if lastMethod != "DELETE" || lastPath != "/api/n9e/notify-rules" {
+		t.Errorf("delete: %s %s", lastMethod, lastPath)
+	}
+}
+
+func TestClientAlertSubscribeCRUD(t *testing.T) {
+	var lastMethod string
+	var lastPath string
+	var lastBody map[string]interface{}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lastMethod = r.Method
+		lastPath = r.URL.Path
+		if r.Body != nil {
+			json.NewDecoder(r.Body).Decode(&lastBody)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		switch r.Method {
+		case "POST":
+			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":22,"name":"test-sub","group_id":2}`), Err: ""})
+		case "GET":
+			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`{"id":22,"name":"test-sub","group_id":2,"disabled":0,"rule_ids":[1],"user_group_ids":[1]}`), Err: ""})
+		case "PUT":
+			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`null`), Err: ""})
+		case "DELETE":
+			json.NewEncoder(w).Encode(Envelope{Dat: json.RawMessage(`null`), Err: ""})
+		}
+	}))
+	defer server.Close()
+
+	c, _ := New(server.URL, "token", 30, false, "test")
+	ctx := context.Background()
+
+	// Create
+	sub := &AlertSubscribe{
+		Name:         "test-sub",
+		GroupId:      2,
+		Disabled:     0,
+		RuleIds:      []int64{1},
+		UserGroupIds: []int64{1},
+	}
+	created, err := c.CreateAlertSubscribe(ctx, 2, sub)
+	if err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
+	if created.ID != 22 {
+		t.Errorf("created ID = %d, want 22", created.ID)
+	}
+	if lastMethod != "POST" || lastPath != "/api/n9e/busi-group/2/alert-subscribes" {
+		t.Errorf("create: %s %s", lastMethod, lastPath)
+	}
+
+	// Read
+	got, err := c.GetAlertSubscribe(ctx, 22)
+	if err != nil {
+		t.Fatalf("get failed: %v", err)
+	}
+	if got.Name != "test-sub" {
+		t.Errorf("got name = %q", got.Name)
+	}
+	if lastMethod != "GET" || lastPath != "/api/n9e/alert-subscribe/22" {
+		t.Errorf("get: %s %s", lastMethod, lastPath)
+	}
+
+	// Update
+	sub.Name = "updated-sub"
+	updated, err := c.UpdateAlertSubscribe(ctx, 2, sub)
+	if err != nil {
+		t.Fatalf("update failed: %v", err)
+	}
+	if updated.Name != "updated-sub" {
+		t.Errorf("updated name = %q", updated.Name)
+	}
+	if lastMethod != "PUT" || lastPath != "/api/n9e/busi-group/2/alert-subscribes" {
+		t.Errorf("update: %s %s", lastMethod, lastPath)
+	}
+
+	// Delete
+	err = c.DeleteAlertSubscribes(ctx, 2, []int64{22})
+	if err != nil {
+		t.Fatalf("delete failed: %v", err)
+	}
+	if lastMethod != "DELETE" || lastPath != "/api/n9e/busi-group/2/alert-subscribes" {
+		t.Errorf("delete: %s %s", lastMethod, lastPath)
+	}
+}
