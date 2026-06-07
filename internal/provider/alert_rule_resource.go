@@ -500,6 +500,16 @@ func (r *AlertRuleResource) refreshState(ctx context.Context, state *AlertRuleRe
 		if !diags.HasError() {
 			state.Queries = listValue
 		}
+	} else {
+		state.Queries = types.ListNull(types.ObjectType{
+			AttrTypes: map[string]attr.Type{
+				"ref":                 types.StringType,
+				"promql":              types.StringType,
+				"duration_seconds":    types.Int64Type,
+				"comparison_operator": types.StringType,
+				"threshold":           types.Float64Type,
+			},
+		})
 	}
 }
 

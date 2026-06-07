@@ -41,6 +41,7 @@ func (p *NightingaleProvider) Metadata(ctx context.Context, req provider.Metadat
 
 func (p *NightingaleProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		MarkdownDescription: "The Nightingale provider allows you to manage [Nightingale](https://github.com/ccfos/nightingale) resources using Terraform.",
 		Attributes: map[string]schema.Attribute{
 			"endpoint": schema.StringAttribute{
 				MarkdownDescription: "Base URL for the Nightingale center API. May be set via NIGHTINGALE_ENDPOINT environment variable.",
